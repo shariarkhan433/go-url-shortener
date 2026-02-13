@@ -1,10 +1,7 @@
 name: CI/CD Pipeline
 
-# 1. When should this run?
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
     branches: [ "main", "master" ]
 
 jobs:
@@ -18,7 +15,7 @@ jobs:
       - name: Setup Go Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25' # Matching your bleeding-edge local version!
+          go-version: '1.25' 
 
       - name: Download Dependencies
         run: go mod download
@@ -26,13 +23,24 @@ jobs:
       - name: Verify Go Build
         run: go build -v ./...
 
-  # Job 2: Verify the Docker infrastructure builds
-  verify-docker:
+  # Job 2: Build and Push Docker Image
+  build-and-push:
     runs-on: ubuntu-latest
-    needs: verify-code # Only run if the Go code successfully compiles
+    needs: verify-code # Waits for Job 1 to succeed
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Build API Docker Image
-        run: docker compose build api
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # CHANGE THIS to your actual Docker Hub username!
+          tags: shariarkhan433/url-shortener-api:latest
