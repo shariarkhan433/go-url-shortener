@@ -1,0 +1,8 @@
+# binaries
+url-shortener
+
+# IDE nad OS files
+.vscode/
+
+#GO workplace
+vendor/

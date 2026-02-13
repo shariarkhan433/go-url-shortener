@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -26,18 +27,32 @@ type ShortenResponse struct {
 }
 
 func main() {
-	// 1. Connect to Postgres (Change 'skhan' to your username!)
-	dbUrl := "postgres://skhan:@localhost:5432/skhan"
+	// 1. Check Environment Variables (Docker sets these)
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost" // Fallback for running locally without Docker
+	}
+	redisHost := os.Getenv("REDIS_HOST")
+	if redisHost == "" {
+		redisHost = "localhost"
+	}
+
+	// 2. Connect to Postgres (Notice we use dbHost and the password from docker-compose)
+	dbUrl := fmt.Sprintf("postgres://skhan:password123@%s:5432/skhan", dbHost)
 	var err error
+
+	// Add a tiny delay to give Postgres time to finish booting inside Docker
+	time.Sleep(2 * time.Second)
+
 	db, err = pgxpool.New(context.Background(), dbUrl)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
 	defer db.Close()
 
-	// 2. Connect to Redis
+	// 3. Connect to Redis (Notice we use redisHost)
 	rdb = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     redisHost + ":6379",
 		Password: "",
 		DB:       0,
 	})
@@ -45,7 +60,7 @@ func main() {
 		log.Fatalf("Could not connect to Redis: %v\n", err)
 	}
 
-	// 3. Setup Router & Start Server
+	// 4. Setup Router & Start Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /shorten", handleShorten)
 	mux.HandleFunc("GET /{code}", handleRedirect)
@@ -83,11 +98,9 @@ func handleRedirect(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	var originalURL string
 
-	// --- STEP 1: Check Redis (RAM) ---
 	cachedURL, err := rdb.Get(ctx, code).Result()
 
 	if err == redis.Nil {
-		// CACHE MISS: Read from Postgres
 		fmt.Println("Cache Miss! Reading from Postgres...")
 		err := db.QueryRow(ctx, "SELECT original_url FROM urls WHERE short_code=$1", code).Scan(&originalURL)
 
@@ -100,7 +113,6 @@ func handleRedirect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Save to Redis for next time
 		rdb.Set(ctx, code, originalURL, 24*time.Hour)
 
 	} else if err != nil {
@@ -108,18 +120,15 @@ func handleRedirect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	} else {
-		// CACHE HIT: Served from RAM
 		fmt.Println("Cache Hit! Served directly from RAM.")
 		originalURL = cachedURL
 	}
 
-	// --- STEP 2: Async Click Counting ---
 	go func() {
 		_, _ = db.Exec(context.Background(),
 			"UPDATE urls SET click_count = click_count + 1 WHERE short_code=$1", code)
 	}()
 
-	// --- STEP 3: Redirect ---
 	http.Redirect(w, r, originalURL, http.StatusFound)
 }
 

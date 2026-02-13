@@ -1,13 +1,11 @@
 version: '3.8'
 
 services:
-  # 1. The Cache
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
 
-  # 2. The Database
   postgres:
     image: postgres:15-alpine
     environment:
@@ -16,12 +14,16 @@ services:
       POSTGRES_DB: skhan
     ports:
       - "5432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # 3. The Go Application (We will build this next)
-  # api:
-  #   build: .
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     - postgres
-  #     - redis
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      - postgres
+      - redis
