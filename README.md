@@ -1,19 +1,25 @@
 # Go URL Shortener (Microservices Architecture)
 
-A high-performance URL shortener service built with Go, featuring a Cache-Aside architecture to minimize database load and maximize speed.
+A production-grade URL shortener service built with Go, featuring a **Cache-Aside** architecture for speed and an **Nginx Reverse Proxy** for security.
 
 ## System Architecture
+- **Gateway:** Nginx (Reverse Proxy & Rate Limiting)
 - **API:** Golang (Standard Library + `pgx` + `go-redis`)
-- **Database:** PostgreSQL (Persistent storage for URLs and click analytics)
+- **Database:** PostgreSQL (Persistent storage for URLs)
 - **Cache:** Redis (In-memory storage for high-speed redirects)
 - **Orchestration:** Docker Compose
-- **CI/CD:** GitHub Actions (Automated builds & Docker Hub deployment)
+- **CI/CD:** GitHub Actions (Automated testing & Docker Hub deployment)
 
 ## Tech Stack
 - **Go 1.25**
+- **Nginx (Alpine)**
 - **PostgreSQL 15**
 - **Redis (Alpine)**
 - **Docker & Docker Compose**
+
+## Security Features
+- **Reverse Proxy:** The Go API is isolated in a private network; only Nginx is exposed to the host.
+- **Rate Limiting:** Nginx limits clients to **10 requests per minute** (with a burst buffer of 5) to prevent abuse/DDoS.
 
 ## Getting Started
 
@@ -24,15 +30,15 @@ A high-performance URL shortener service built with Go, featuring a Cache-Aside 
 1. Clone the repository:
    ```bash
    git clone [https://github.com/YOUR_USERNAME/go-url-shortener.git](https://github.com/YOUR_USERNAME/go-url-shortener.git)
-   cd go-url-shortener```
+   cd go-url-shortener
 2. Spin up the entire stack
     ```bash 
     sudo docker compose up --build```
 3. Shorten the URL
     ```bash
-    curl -X POST -d '{"url": "[https://google.com](https://google.com)"}' http://localhost:8080/shorten```
+    curl -X POST -d '{"url": "[https://google.com](https://google.com)"}' http://localhost/shorten_code```
 4. Redirect
-    Visit http://localhost:8080/{short_code} in your browser.
+    Visit http://localhost/{short_code} in your browser.
 
 ### Optimization: Cache-Aside Pattern
 This project implements a cache-avoidance strategy. When a redirect is requested:
@@ -42,8 +48,8 @@ This project implements a cache-avoidance strategy. When a redirect is requested
 2. If it's a Cache Hit, the user is redirected instantly.
 
 3. If it's a Cache Miss, the system queries PostgreSQL, populates the cache for future requests, and then redirects.
-
-4. Async Analytics: Click counts are updated in the background via Goroutines to ensure zero latency for the user.
+4. Nginx checks the rate limit. If safe, forwards to Go API
+5. Async Analytics: Click counts are updated in the background via Goroutines to ensure zero latency for the user.
 
 
 ### The Final Step
